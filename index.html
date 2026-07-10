@@ -3226,6 +3226,7 @@
 
         qrContainer.style.display = "none"; 
         qrImg.src = "";
+        qrImg.removeAttribute("crossOrigin"); // လုံခြုံရေးအရ ပိတ်မချခံရအောင် ဖြုတ်ထားပါမည်
 
         if (showQr && balance > 0) {
             let targetUrl = "";
@@ -3249,23 +3250,40 @@
             }
 
             if (targetUrl) {
-                try {
-                    // Preview တွင် ပုံချက်ချင်းပေါ်ရန်
-                    qrImg.src = targetUrl;
-                    qrContainer.style.display = "block";
-                    qrImg.crossOrigin = "anonymous";
-                    
-                    // Download အတွက် နောက်ကွယ်မှ Base64 သို့ ပြောင်းထားပေးခြင်း (Blob Data)
-                    const res = await fetch("https://api.allorigins.win/raw?url=" + encodeURIComponent(targetUrl));
-                    const blob = await res.blob();
-                    const reader = new FileReader();
-                    reader.onloadend = function() {
-                        qrImg.src = reader.result;
-                    };
-                    reader.readAsDataURL(blob);
-                } catch (e) {
-                    console.error("QR Base64 load error:", e);
-                }
+                qrContainer.style.display = "block";
+                // ပုံ Load ဆွဲနေချိန် Loading ပြထားမည်
+                qrImg.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 85 85'%3E%3Crect width='85' height='85' fill='%23eef2ff'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-size='10' fill='%234f46e5'%3ELoading...%3C/text%3E%3C/svg%3E";
+                
+                // Proxy များကိုသုံး၍ Base64 ပြောင်းမည့် Function
+                const fetchBase64 = async (url) => {
+                    const proxies = [
+                        `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+                        `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`
+                    ];
+                    for (let p of proxies) {
+                        try {
+                            const r = await fetch(p);
+                            if (r.ok) {
+                                const b = await r.blob();
+                                return await new Promise(res => {
+                                    const reader = new FileReader();
+                                    reader.onloadend = () => res(reader.result);
+                                    reader.readAsDataURL(b);
+                                });
+                            }
+                        } catch(e){}
+                    }
+                    return null;
+                };
+
+                // Base64 ရပြီဆိုတာနဲ့ ပုံကို အစားထိုးမည်
+                fetchBase64(targetUrl).then(base64 => {
+                    if (base64) {
+                        qrImg.src = base64; // Data URL ဖြစ်သွား၍ Download လုံးဝရသွားပါမည်
+                    } else {
+                        qrImg.src = targetUrl; // Error တက်ခဲ့ပါက Preview တွင် ပုံပေါ်စေရန် ရိုးရိုး Link သာသုံးမည်
+                    }
+                });
             }
         }
         
